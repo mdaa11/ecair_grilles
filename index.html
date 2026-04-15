@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECAIR — Grilles Qualité</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#F5F3EE;--surface:#FDFCF9;--border:#E2DDD5;--border-strong:#C8C0B4;--text:#1A1714;--text-muted:#7A7269;--accent:#2A5C45;--accent-light:#EAF1ED;--ok:#2A5C45;--ok-bg:#EAF1ED;--ko:#8B2020;--ko-bg:#F7EDED;--na:#5A5248;--na-bg:#EDEBE7;--radius:8px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;}
+.app{display:flex;height:100vh;overflow:hidden;}
+.sidebar{width:240px;min-width:240px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;}
+.sidebar-header{padding:20px 16px 14px;border-bottom:1px solid var(--border);}
+.logo{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;letter-spacing:.12em;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;}
+.sidebar-title{font-size:16px;font-weight:600;}
+.sidebar-nav{flex:1;overflow-y:auto;padding:10px 8px;}
+.nav-section{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);padding:10px 8px 6px;}
+.nav-btn{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:none;background:none;border-radius:var(--radius);cursor:pointer;text-align:left;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text-muted);transition:all .15s;}
+.nav-btn:hover{background:var(--bg);color:var(--text);}
+.nav-btn.active{background:var(--accent-light);color:var(--accent);font-weight:500;}
+.nav-badge{margin-left:auto;font-family:'DM Mono',monospace;font-size:10px;background:var(--border);color:var(--text-muted);padding:1px 6px;border-radius:99px;}
+.nav-btn.active .nav-badge{background:var(--accent);color:white;}
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.topbar-title{font-size:15px;font-weight:600;flex:1;min-width:200px;}
+.field-group{display:flex;align-items:center;gap:8px;}
+.field-label{font-family:'DM Mono',monospace;font-size:11px;color:var(--text-muted);white-space:nowrap;}
+input[type=text],input[type=date]{font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 10px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--bg);color:var(--text);outline:none;}
+input[type=text]{width:200px;}input[type=date]{width:150px;}
+.btn-export{font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:7px 16px;background:var(--accent);color:white;border:none;border-radius:var(--radius);cursor:pointer;white-space:nowrap;}
+.btn-export:disabled{opacity:.4;cursor:not-allowed;}
+.content{flex:1;padding:24px 28px;}
+.grille-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
+.stats-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.stat-pill{font-family:'DM Mono',monospace;font-size:11px;padding:3px 9px;border-radius:99px;font-weight:500;}
+.stat-ok{background:var(--ok-bg);color:var(--ok);}
+.stat-ko{background:var(--ko-bg);color:var(--ko);}
+.stat-na{background:var(--na-bg);color:var(--na);}
+.stat-total{background:var(--border);color:var(--text-muted);}
+.score-display{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--accent);}
+.btn-reset{font-size:12px;padding:5px 12px;border:1px solid var(--border-strong);background:var(--surface);border-radius:var(--radius);cursor:pointer;color:var(--text-muted);}
+.tab-bar{display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--border);}
+.tab-btn{font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:8px 24px;border:none;background:none;cursor:pointer;color:var(--text-muted);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+.section-block{margin-bottom:6px;}
+.section-title{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);padding:12px 0 6px;border-top:1px solid var(--border);margin-top:4px;}
+.criteria-row{display:flex;align-items:flex-start;gap:12px;padding:8px 10px;border-radius:var(--radius);border:1px solid transparent;margin-bottom:2px;}
+.criteria-row:hover{background:var(--surface);}
+.criteria-row.is-ko{background:var(--ko-bg);border-color:#E8C4C4;}
+.criteria-row.is-na{background:var(--na-bg);border-color:var(--border);}
+.criteria-text{flex:1;line-height:1.45;font-size:13px;padding-top:1px;}
+.criteria-hint{font-size:11px;color:var(--text-muted);margin-top:2px;font-style:italic;}
+.criteria-poids{font-family:'DM Mono',monospace;font-size:11px;color:var(--text-muted);min-width:24px;text-align:right;padding-top:3px;}
+.okna-group{display:flex;gap:4px;flex-shrink:0;padding-top:1px;}
+.okna-btn{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;padding:3px 8px;border-radius:5px;border:1px solid var(--border-strong);background:var(--bg);cursor:pointer;color:var(--text-muted);}
+.okna-btn.ok.selected{background:var(--ok-bg);border-color:var(--ok);color:var(--ok);}
+.okna-btn.ko.selected{background:var(--ko-bg);border-color:var(--ko);color:var(--ko);}
+.okna-btn.na.selected{background:var(--na-bg);border-color:var(--na);color:var(--na);}
+.comment-input{display:none;margin-top:6px;width:100%;font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 8px;border:1px solid #E8C4C4;border-radius:5px;background:white;color:var(--ko);outline:none;resize:none;}
+.criteria-row.is-ko .comment-input{display:block;}
+.list-view{padding:4px 0;}
+.list-item{display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;cursor:pointer;}
+.list-item:hover{border-color:var(--accent);background:var(--accent-light);}
+.list-code{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--accent);min-width:50px;}
+.list-name{flex:1;font-size:14px;font-weight:500;}
+.list-count{font-size:12px;color:var(--text-muted);}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-muted);}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">ECAIR</div>
+      <div class="sidebar-title">Grilles Qualité</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Navigation</div>
+      <button class="nav-btn active" id="nav-list" onclick="showList()">Toutes les grilles <span class="nav-badge">4</span></button>
+      <div class="nav-section" style="margin-top:8px;">Grilles</div>
+      <button class="nav-btn" id="nav-A4" onclick="openGrille('A4')">A4 — Reversement aides MAR <span class="nav-badge">38</span></button>
+      <button class="nav-btn" id="nav-A5" onclick="openGrille('A5')">A5 — Commande COFRAC <span class="nav-badge">57</span></button>
+      <button class="nav-btn" id="nav-A6" onclick="openGrille('A6')">A6 — Mail relance instructeur <span class="nav-badge">11</span></button>
+      <button class="nav-btn" id="nav-A7A8" onclick="openGrille('A7A8')">A7/A8 — RAPO <span class="nav-badge">32</span></button>
+    </nav>
+  </aside>
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Sélectionner une grille</div>
+      <div class="field-group"><span class="field-label">Particulier</span><input type="text" id="input-nom" placeholder="Prénom Nom"></div>
+      <div class="field-group"><span class="field-label">Date</span><input type="date" id="input-date"></div>
+      <div class="field-group"><span class="field-label">BOA</span><input type="text" id="input-boa" placeholder="Nom du BOA" style="width:150px"></div>
+      <button class="btn-export" id="btn-export" onclick="exportXlsx()" disabled>Exporter .xlsx</button>
+    </div>
+    <div class="content" id="content">
+      <div class="empty-state"><p style="font-size:15px;font-weight:500;color:var(--text)">Aucune grille sélectionnée</p><p style="margin-top:6px;font-size:13px;">Choisissez une grille dans le menu de gauche</p></div>
+    </div>
+  </main>
+</div>
+<script>
+const GRILLES = {"A4": {"code": "A4", "title": "A4 — Reversement des aides MAR / Attestation de reversement", "sections": [{"title": "Type de document", "items": [{"text": "Vérifier quel type de document (A ou B)", "hint": "Demande CSM présente dans le thread client", "poids": 2}]}, {"title": "(A) Reversement des aides MAR", "items": [{"text": "Le prénom et nom du client sont biens présents et correctement orthographiés", "hint": "Information sur Ecair", "poids": 2}, {"text": "La date de naissance du client correspond à celle sur le justificatif d'identité", "hint": "Information sur Ecair", "poids": 2}, {"text": "Le lieu de naissance du client correspond à celui sur le justificatif d'identité", "hint": "Information sur Ecair", "poids": 2}, {"text": "Adresse des travaux bien renseignée et est bien celle indiqué dans Adresse du logement à rénover", "hint": "Information sur Ecair", "poids": 2}, {"text": "Nom du professionnel est bien celui qui figurent sur le devis", "hint": "Information sur Ecair / contrat / devis", "poids": 2}, {"text": "Raison social du professionnel est bien celles qui figurent sur le devis", "hint": "Information sur Ecair / contrat / devis", "poids": 2}, {"text": "L'immatriculée au RCS est bien celui apparant dans le contrat de prêt ou EDC", "hint": "Information sur Ecair / contrat de prêt / edc", "poids": 2}, {"text": "Le numéro Siret du professionnel est bien celui qui figurent sur le devis", "hint": "Information sur Ecair / contrat / devis", "poids": 2}, {"text": "Le siège social du professionnel est bien celui qui figurent sur le devis", "hint": "Information sur Ecair / contrat / devis", "poids": 2}, {"text": "Nom du représentant professionnel est le même que sur le contrat de prêt et EDC", "hint": "Information sur Ecair / contrat de prêt", "poids": 2}, {"text": "Nom du MAR correspond à celui indiqué dans le détail du projet (MAR)", "hint": "Information sur Ecair / Mar", "poids": 2}, {"text": "Montant MAR cohérent avec contrat MAR", "hint": "Information sur Ecair (partie document)", "poids": 4}, {"text": "Montant aides MAR cohérent avec ECAIR > Paiement", "hint": "Dans Ecair dans documents (montant entre 1500 et 3000 euros généralement)", "poids": 4}, {"text": "Montant aides MAR bien indiqué comme le montant dans ECAIR (dans MAR)", "hint": "Détails du projet > MAR (max 2000 euros)", "poids": 4}, {"text": "Document renommé correctement (NOM CLIENT - Reversement aides MAR)", "hint": "", "poids": 2}, {"text": "Présence complet des noms dans la signature", "hint": "Information sur Ecair / contrat de prêt / edc", "poids": 0}]}, {"title": "(B) Attestation de reversement d'une avance", "items": [{"text": "Requête Slack correcte bien envoyée au bot", "hint": "", "poids": 1}, {"text": "Le prénom et nom sont biens présents et correctement orthographiés", "hint": "Information sur Ecair", "poids": 2}, {"text": "La date de naissance du client correspond à celle sur le justificatif d'identité", "hint": "Information sur Ecair", "poids": 2}, {"text": "Le lieu de naissance du client correspond à celui sur le justificatif d'identité", "hint": "Information sur Ecair", "poids": 2}, {"text": "Adresse de résidence bien renseignée (pas forcément l'adresse du chantier)", "hint": "Information sur Ecair", "poids": 2}, {"text": "Numéro de téléphone correct et similaire à celui présent dans la fiche client", "hint": "Information sur Ecair", "poids": 2}, {"text": "Mail correct et identique à celui présent dans la fiche client", "hint": "Information sur Ecair", "poids": 2}, {"text": "Nom du professionnel est bien celui qui figurent sur le devis", "hint": "Information sur Ecair", "poids": 2}, {"text": "Raison social du professionnel est bien celles qui figurent sur le devis", "hint": "Information sur Retool / contrat / devis", "poids": 2}, {"text": "Le numéro Siret du professionnel est bien celui qui figurent sur le devis", "hint": "Information sur Retool / contrat / devis", "poids": 2}, {"text": "Le siège social du professionnel est bien celui qui figurent sur le devis", "hint": "Information sur Retool / contrat / devis", "poids": 2}, {"text": "Nom du représentant professionnel est le même que sur le contrat de prêt et EDC", "hint": "Information sur Retool / contrat / devis", "poids": 2}, {"text": "Nom du MAR correspond à celui indiqué dans le détail du projet (MAR)", "hint": "Information sur Ecair", "poids": 2}, {"text": "Montant Total de MaPrime renov accordé par l'ANAH", "hint": "Information sur Ecair (détail du projet / paiement)", "poids": 4}, {"text": "Dont part Aides Travaux (correspond bien à celui dans paiement)", "hint": "Information sur Ecair (détail du projet / paiement)", "poids": 4}, {"text": "Dont part Aides MAR (correspond bien à celui dans paiement)", "hint": "Information sur Ecair (détail du projet / paiement)", "poids": 4}, {"text": "Montant de cette aide ayant fait l'objet d'une avance par l'ANAH au Client", "hint": "Information sur Ecair (détail du projet / paiement)", "poids": 4}, {"text": "Montant de l'avance ayant été reversé par le Client à l'Entreprise", "hint": "Information sur Ecair (détail du projet / paiement)", "poids": 4}, {"text": "Montant de l'avance destiné à régler l'Accompagnateur Rénov", "hint": "Information sur Ecair (détail du projet / paiement)", "poids": 4}, {"text": "Document renommé correctement", "hint": "", "poids": 2}, {"text": "Présence complet des noms dans la signature", "hint": "Information sur Ecair (si nom très long, remplir le document via le template)", "poids": 4}]}]}, "A5": {"code": "A5", "title": "A5 — Vérification Commande COFRAC SPEKTY", "sections": [{"title": "Choix plateforme et formulaire", "items": [{"text": "La bonne plateforme a été sélectionnée (PAC seule ou PAC + SSC, Ampleur ou Monogeste)", "hint": "Informations dans devis", "poids": 4}, {"text": "Le bon formulaire a été choisi en fonction des travaux", "hint": "", "poids": 4}]}, {"title": "Référence et document", "items": [{"text": "La référence de la commande correspond bien au nom du particulier", "hint": "Information sur Ecair", "poids": 1}, {"text": "La facture du client a été ajoutée", "hint": "Information sur Ecair", "poids": 1}]}, {"title": "Coordonnées du client", "items": [{"text": "Le nom dans le formulaire COFRAC correspond au nom sur Ecair", "hint": "Information sur Ecair", "poids": 1}, {"text": "L'adresse du chantier est identique à celle sur Ecair (Adresse du logement à rénover)", "hint": "Information sur Ecair — important", "poids": 4}, {"text": "Les informations de contact (téléphone, mail) sont similaires à la fiche client", "hint": "Information sur Ecair — important", "poids": 4}, {"text": "Si informations complémentaires, l'information a été correctement ajoutée", "hint": "Information indiqué par le CSM", "poids": 2}]}, {"title": "Lot de travaux", "items": [{"text": "Tous les lots de travaux indiqués sur la facture ont été cochés", "hint": "Information à vérifier avec la facture", "poids": 4}, {"text": "Aucune case n'a été cochée en trop", "hint": "Information à vérifier avec la facture", "poids": 1}]}, {"title": "Isolation des combles perdus", "items": [{"text": "Si lot combles perdus, la case a été cochée", "hint": "", "poids": 2}, {"text": "Marque et référence isolant corrects", "hint": "", "poids": 2}, {"text": "Épaisseur isolant correcte", "hint": "", "poids": 2}, {"text": "Surface isolée correcte", "hint": "", "poids": 2}]}, {"title": "Isolation des rampants de toiture", "items": [{"text": "Si lot rampants, la case a été cochée", "hint": "", "poids": 2}, {"text": "Marque et référence isolant corrects", "hint": "", "poids": 2}, {"text": "Épaisseur isolant correcte", "hint": "", "poids": 2}, {"text": "Surface isolée correcte", "hint": "", "poids": 2}]}, {"title": "Isolation du plancher bas", "items": [{"text": "Si lot plancher bas, la case a été cochée", "hint": "", "poids": 2}, {"text": "Marque et référence isolant corrects", "hint": "", "poids": 2}, {"text": "Épaisseur isolant correcte", "hint": "", "poids": 2}, {"text": "Surface isolée correcte", "hint": "", "poids": 2}]}, {"title": "Isolation des murs par intérieur", "items": [{"text": "Si lot murs intérieur, la case a été cochée", "hint": "", "poids": 2}, {"text": "Marque et référence isolant corrects", "hint": "", "poids": 2}, {"text": "Épaisseur isolant correcte", "hint": "", "poids": 2}, {"text": "Surface isolée correcte", "hint": "", "poids": 2}]}, {"title": "Isolation des murs par extérieur", "items": [{"text": "Si lot murs extérieur, la case a été cochée", "hint": "", "poids": 2}, {"text": "Marque et référence isolant corrects", "hint": "", "poids": 2}, {"text": "Épaisseur isolant correcte", "hint": "", "poids": 2}, {"text": "Surface isolée correcte", "hint": "", "poids": 2}]}, {"title": "Installation PAC AIR/EAU", "items": [{"text": "Si PAC AIR/EAU, la case a été cochée", "hint": "", "poids": 2}, {"text": "Type de PAC correct", "hint": "", "poids": 2}, {"text": "Marque et référence PAC corrects", "hint": "", "poids": 2}]}, {"title": "Installation PAC AIR/AIR", "items": [{"text": "Si PAC AIR/AIR, la case a été cochée", "hint": "", "poids": 2}, {"text": "Nombre de splits correct", "hint": "", "poids": 2}, {"text": "Nombre d'unités extérieures correct", "hint": "", "poids": 2}]}, {"title": "Chaudière / SSC / CET / Poêle / VMC / Menuiserie / Radiateur / Autres", "items": [{"text": "Si chaudière, case cochée + type correct", "hint": "", "poids": 2}, {"text": "Si SSC, case cochée", "hint": "", "poids": 2}, {"text": "Si CET, case cochée + type + volume + marque/modèle", "hint": "", "poids": 2}, {"text": "Si poêle, case cochée + type", "hint": "", "poids": 2}, {"text": "Si VMC, case cochée + type", "hint": "", "poids": 2}, {"text": "Si menuiserie, case cochée + nb fenêtres + portes-fenêtres + portes", "hint": "", "poids": 2}, {"text": "Si radiateur, case cochée + nombre", "hint": "", "poids": 2}, {"text": "Si autres travaux, case cochée et correctement renseignée", "hint": "", "poids": 2}]}, {"title": "Suivi commandes", "items": [{"text": "La commande a bien été effectuée (réponse au CSM, vérification sur la plateforme)", "hint": "Slack et sur Spekty", "poids": 2}, {"text": "La commande a été ajoutée au fichier de suivi de commandes", "hint": "Excel", "poids": 2}]}]}, "A6": {"code": "A6", "title": "A6 — Mail de relance au centre instructeur", "sections": [{"title": "Critères de vérification", "items": [{"text": "Vérifier les derniers mails reçus concernant ce particulier dans les archives", "hint": "Le dernier mail devrait normalement être l'accusé de réception de l'Anah", "poids": 2}, {"text": "Le statut sur Mon projet ANAH n'est pas indiqué comme solde payé", "hint": "Information sur MonprojetANAH", "poids": 2}, {"text": "Le particulier est de catégorie de revenus modeste ou très modeste", "hint": "Information sur Ecair", "poids": 2}, {"text": "L'email de l'instructeur ou de la collectivité délégataire a bien été saisie en tant que destinataire", "hint": "Information sur MonprojetANAH", "poids": 2}, {"text": "L'email est bien envoyé depuis maprimerenov@ecair.eco", "hint": "", "poids": 2}, {"text": "maprimerenov@ecair.eco est bien en CC du mail", "hint": "", "poids": 2}, {"text": "Le sujet du mail a la bonne formulation", "hint": "", "poids": 2}, {"text": "Le nom et le prénom du particulier sont correctement orthographiés", "hint": "Information sur Ecair", "poids": 2}, {"text": "La référence du dossier est correcte", "hint": "Information sur MonprojetANAH et sur Ecair", "poids": 2}, {"text": "La date de la demande de solde est correcte", "hint": "La date est celle mentionnée dans l'email d'accusé de réception de l'Anah", "poids": 2}, {"text": "La signature ECAIR du BOA a été ajoutée", "hint": "", "poids": 2}]}]}, "A7A8": {"code": "A7A8", "title": "A7/A8 — RAPO", "tabs": [{"code": "A7", "title": "A7 — Rédiger un RAPO", "sections": [{"title": "Critères de vérification", "items": [{"text": "A.7.1 — Le statut sur Mon projet ANAH n'est pas solde payé", "hint": "Information sur MonprojetANAH", "poids": 2}, {"text": "A.7.2 — Recherche des mails ANAH effectuée (date du dernier mail)", "hint": "La dernière réponse doit dater de minimum 2 mois", "poids": 2}, {"text": "A.7.3 — Bon modèle de RAPO sélectionné (A/B/C/D/E)", "hint": "A: silence total, B: demande complémentaire, C: retard annoncé, D: contrôle chantier, E: refus versement mandataire", "poids": 2}, {"text": "A.7.4 — Type de statut du client vérifié (MO / TMO / SUP...)", "hint": "Information sur Ecair", "poids": 1}, {"text": "A.7.5 — Adresse de Courriel correcte (valerie.mancret-taylor@anah.gouv.fr ou centre instructeur)", "hint": "En fonction du statut", "poids": 1}, {"text": "A.7.6 — Date de soumission du RAPO correspond bien à la date du jour", "hint": "Prendre date du jour si matin ou du lendemain", "poids": 2}, {"text": "A.7.7 — Numéro dossier correct (MonprojetANAH ou Ecair)", "hint": "", "poids": 2}, {"text": "A.7.8 — Le prénom et nom du client sont biens présents et correctement orthographiés", "hint": "Information sur Mon projet ANAH", "poids": 2}, {"text": "A.7.9 — Montants aides corrects (aides Travaux + aides MAR)", "hint": "Vérifier dans threads Slack. Prendre montant MPR", "poids": 2}, {"text": "A.7.10 — Centre instructeur identique à celui sur ANAH", "hint": "Information sur Mon projet ANAH (DDT) ou ANAH directement", "poids": 2}, {"text": "A.7.11 — Date de soumission de demande de solde correcte", "hint": "Dans boite mail regarder date du dernier mail", "poids": 2}, {"text": "A.7.12 — Nombre de mois sans réponse correct (si non adapté : NA)", "hint": "Calculer depuis la date du dernier mail", "poids": 2}, {"text": "A.7.13 — Nombre de semaines sans réponse correct (si non adapté : NA)", "hint": "Calculer depuis la date du dernier mail", "poids": 2}, {"text": "A.7.14 — Date accord bénéficiaire pour contrôle (si non adapté : NA)", "hint": "Slack", "poids": 2}, {"text": "A.7.15 — RAPO envoyé au CSM dans le bon canal", "hint": "Slack", "poids": 2}]}]}, {"code": "A8", "title": "A8 — Envoyer un RAPO", "sections": [{"title": "Vérification par email", "items": [{"text": "A.8.1 — Document renommé correctement (Courrier ANAH - retard de paiement NOM CLIENT (signed))", "hint": "", "poids": 1}, {"text": "A.8.2 — Objet du mail avec bon numéro de dossier et nom client", "hint": "Relance - Demande de paiement MaPrimeRenov - Dossier XXXX - NOM DU PARTICULIER", "poids": 2}, {"text": "A.8.3 — Bonne formulation du mail (pas de faute, contexte clair)", "hint": "Exemple sur Notion", "poids": 2}, {"text": "A.8.4 — Envoi depuis maprimerenov@ecair.eco", "hint": "", "poids": 1}, {"text": "A.8.5 — RAPO bien signé par Victor Jolly", "hint": "", "poids": 2}, {"text": "A.8.6 — Bon destinataire (MPA ou ANAH central)", "hint": "MO/TMO -> MPA ; INT/SUP -> valerie.mancret-taylor@anah.gouv.fr", "poids": 2}, {"text": "A.8.7 — Pièce jointe bien ajoutée", "hint": "", "poids": 2}, {"text": "A.8.8 — maprimerenov@ecair.eco bien en CC", "hint": "", "poids": 2}]}, {"title": "Vérification par courrier postal", "items": [{"text": "A.8.9 — Le document est bien la version finale (signé)", "hint": "", "poids": 2}, {"text": "A.8.10 — Destinataire correct (Valérie Mancret-Taylor - ANAH)", "hint": "", "poids": 2}, {"text": "A.8.11 — Adresse ANAH correcte (8 avenue de L'Opéra, 75001, Paris)", "hint": "", "poids": 2}, {"text": "A.8.12 — Impression recto/verso", "hint": "", "poids": 1}, {"text": "A.8.13 — Impression couleur", "hint": "", "poids": 1}, {"text": "A.8.14 — Affranchissement recommandé AR", "hint": "", "poids": 2}, {"text": "A.8.15 — Adresse expéditeur ECAIR correcte (10 rue de la vacquerie, 75011, PARIS)", "hint": "", "poids": 1}, {"text": "A.8.16 — Nom expéditeur correct (Victor Jolly)", "hint": "", "poids": 1}, {"text": "A.8.17 — Message Slack envoyé dans thread client", "hint": "", "poids": 2}]}]}]}};
+
+const today = new Date().toISOString().split('T')[0];
+document.getElementById('input-date').value = today;
+
+let currentGrille = null;
+let activeTab = {};
+const answers = {};
+const comments = {};
+
+function getItems(code) {
+  const g = GRILLES[code];
+  if (g.tabs) {
+    const result = {};
+    g.tabs.forEach(function(tab) { result[tab.code] = tab.sections.flatMap(function(s) { return s.items; }); });
+    return result;
+  }
+  return { [code]: g.sections.flatMap(function(s) { return s.items; }) };
+}
+
+function initAnswers(code) {
+  const g = GRILLES[code];
+  const codes = g.tabs ? g.tabs.map(function(t) { return t.code; }) : [code];
+  const sectionSets = g.tabs ? g.tabs.map(function(t) { return t.sections; }) : [g.sections];
+  codes.forEach(function(c, i) {
+    if (!answers[c]) {
+      answers[c] = {};
+      comments[c] = {};
+      let idx = 0;
+      sectionSets[i].forEach(function(s) {
+        s.items.forEach(function() { answers[c][idx] = 'OK'; comments[c][idx] = ''; idx++; });
+      });
+    }
+  });
+}
+
+function setAnswer(tabCode, idx, val) {
+  answers[tabCode][idx] = val;
+  const row = document.querySelector('[data-tab="' + tabCode + '"][data-idx="' + idx + '"]');
+  if (!row) return;
+  row.className = 'criteria-row' + (val === 'KO' ? ' is-ko' : val === 'NA' ? ' is-na' : '');
+  row.querySelectorAll('.okna-btn').forEach(function(b) { b.classList.remove('selected'); });
+  row.querySelector('.okna-btn.' + val.toLowerCase()).classList.add('selected');
+  updateStats(currentGrille);
+}
+
+function updateStats(code) {
+  const g = GRILLES[code];
+  let ok = 0, ko = 0, na = 0, total = 0, scoreMax = 0, scoreOK = 0;
+  const tabs = g.tabs ? g.tabs : [{code: code, sections: g.sections}];
+  tabs.forEach(function(tab) {
+    if (!answers[tab.code]) return;
+    let idx = 0;
+    tab.sections.forEach(function(s) {
+      s.items.forEach(function(item) {
+        const v = answers[tab.code][idx] || 'OK';
+        total++; if (v === 'OK') ok++; else if (v === 'KO') ko++; else na++;
+        if (v !== 'NA' && item.poids > 0) scoreMax += item.poids;
+        if (v === 'OK' && item.poids > 0) scoreOK += item.poids;
+        idx++;
+      });
+    });
+  });
+  const taux = scoreMax > 0 ? Math.round(scoreOK / scoreMax * 100) : 0;
+  const el = document.getElementById('stats-' + code);
+  if (el) el.innerHTML =
+    '<span class="stat-pill stat-ok">OK: ' + ok + '</span>' +
+    '<span class="stat-pill stat-ko">KO: ' + ko + '</span>' +
+    '<span class="stat-pill stat-na">NA: ' + na + '</span>' +
+    '<span class="stat-pill stat-total">' + total + ' critères</span>' +
+    '<span class="score-display">Taux: ' + taux + '%</span>';
+}
+
+function buildSectionsHtml(tabCode, sections) {
+  let html = '';
+  let globalIdx = 0;
+  sections.forEach(function(section) {
+    html += '<div class="section-block"><div class="section-title">' + section.title + '</div>';
+    section.items.forEach(function(item) {
+      const idx = globalIdx;
+      const val = (answers[tabCode] && answers[tabCode][idx]) ? answers[tabCode][idx] : 'OK';
+      const rowClass = 'criteria-row' + (val === 'KO' ? ' is-ko' : val === 'NA' ? ' is-na' : '');
+      html += '<div class="' + rowClass + '" data-tab="' + tabCode + '" data-idx="' + idx + '">';
+      html += '<div class="criteria-text">' + item.text;
+      if (item.hint) html += '<div class="criteria-hint">' + item.hint + '</div>';
+      html += '<textarea class="comment-input" placeholder="Commentaire sur erreur..." rows="2" data-tab="' + tabCode + '" data-idx="' + idx + '">' + ((comments[tabCode] && comments[tabCode][idx]) ? comments[tabCode][idx] : '') + '</textarea>';
+      html += '</div>';
+      html += '<span class="criteria-poids">' + (item.poids > 0 ? item.poids : '') + '</span>';
+      html += '<div class="okna-group">';
+      ['OK','KO','NA'].forEach(function(v) {
+        html += '<button class="okna-btn ' + v.toLowerCase() + (val === v ? ' selected' : '') + '" onclick="setAnswer(' + JSON.stringify(tabCode) + ',' + idx + ',' + JSON.stringify(v) + ')">' + v + '</button>';
+      });
+      html += '</div></div>';
+      globalIdx++;
+    });
+    html += '</div>';
+  });
+  return html;
+}
+
+function renderGrille(code) {
+  initAnswers(code);
+  const g = GRILLES[code];
+  let html = '<div class="grille-header"><div id="stats-' + code + '" class="stats-row"></div>';
+  html += '<button class="btn-reset" onclick="resetGrille(\'' + code + '\')">Tout remettre en OK</button></div>';
+
+  if (g.tabs) {
+    if (!activeTab[code]) activeTab[code] = g.tabs[0].code;
+    const curTab = activeTab[code];
+    // Tab bar
+    html += '<div class="tab-bar">';
+    g.tabs.forEach(function(tab) {
+      html += '<button class="tab-btn' + (tab.code === curTab ? ' active' : '') + '" onclick="switchTab(\'' + code + '\',\'' + tab.code + '\')">' + tab.title + '</button>';
+    });
+    html += '</div>';
+    // Active tab content
+    const tab = g.tabs.find(function(t) { return t.code === curTab; });
+    html += buildSectionsHtml(tab.code, tab.sections);
+  } else {
+    html += buildSectionsHtml(code, g.sections);
+  }
+
+  document.getElementById('content').innerHTML = html;
+  document.querySelectorAll('.comment-input').forEach(function(el) {
+    el.addEventListener('change', function() {
+      if (!comments[this.dataset.tab]) comments[this.dataset.tab] = {};
+      comments[this.dataset.tab][parseInt(this.dataset.idx)] = this.value;
+    });
+  });
+  updateStats(code);
+}
+
+function switchTab(code, tabCode) {
+  activeTab[code] = tabCode;
+  renderGrille(code);
+}
+
+function resetGrille(code) {
+  const g = GRILLES[code];
+  const tabs = g.tabs ? g.tabs : [{code: code, sections: g.sections}];
+  tabs.forEach(function(tab) {
+    let idx = 0;
+    tab.sections.forEach(function(s) {
+      s.items.forEach(function() { answers[tab.code][idx] = 'OK'; comments[tab.code][idx] = ''; idx++; });
+    });
+  });
+  renderGrille(code);
+}
+
+function openGrille(code) {
+  currentGrille = code;
+  document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('nav-' + code).classList.add('active');
+  document.getElementById('topbar-title').textContent = GRILLES[code].title;
+  document.getElementById('btn-export').disabled = false;
+  renderGrille(code);
+}
+
+function showList() {
+  currentGrille = null;
+  document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('nav-list').classList.add('active');
+  document.getElementById('topbar-title').textContent = 'Toutes les grilles disponibles';
+  document.getElementById('btn-export').disabled = true;
+  let html = '<div class="list-view">';
+  Object.values(GRILLES).forEach(function(g) {
+    let count;
+    if (g.tabs) {
+      count = g.tabs.reduce(function(a, tab) { return a + tab.sections.reduce(function(b, s) { return b + s.items.length; }, 0); }, 0);
+    } else {
+      count = g.sections.reduce(function(a, s) { return a + s.items.length; }, 0);
+    }
+    html += '<div class="list-item" onclick="openGrille(\'' + g.code + '\')">';
+    html += '<span class="list-code">' + g.code + '</span>';
+    html += '<div><div class="list-name">' + g.title + '</div><div class="list-count">' + count + ' critères</div></div>';
+    html += '<span class="list-arrow">&#8594;</span></div>';
+  });
+  html += '</div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+function exportXlsx() {
+  if (!currentGrille) return;
+  const nom = document.getElementById('input-nom').value.trim() || 'Prénom Nom';
+  const date = document.getElementById('input-date').value || today;
+  const boa = document.getElementById('input-boa').value.trim() || '';
+  const code = currentGrille;
+
+  const payload = { code, nom, date, boa, answers: {}, comments: {} };
+  if (GRILLES[code].tabs) {
+    GRILLES[code].tabs.forEach(function(tab) {
+      payload.answers[tab.code] = answers[tab.code] || {};
+      payload.comments[tab.code] = comments[tab.code] || {};
+    });
+  } else {
+    payload.answers[code] = answers[code] || {};
+    payload.comments[code] = comments[code] || {};
+  }
+
+  const btn = document.getElementById('btn-export');
+  btn.textContent = 'Génération...';
+  btn.disabled = true;
+
+  fetch('/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(function(res) {
+    if (!res.ok) throw new Error('Erreur serveur');
+    return res.blob();
+  })
+  .then(function(blob) {
+    const displayCode = code === 'A7A8' ? 'A7-A8' : code;
+    const filename = date + ' - GQualité ' + displayCode + ' - ' + nom + '.xlsx';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    btn.textContent = 'Exporter .xlsx';
+    btn.disabled = false;
+  })
+  .catch(function(err) {
+    alert('Erreur : ' + err.message);
+    btn.textContent = 'Exporter .xlsx';
+    btn.disabled = false;
+  });
+}
+showList();
+</script>
+</body>
+</html>
