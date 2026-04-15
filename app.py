@@ -81,15 +81,26 @@ def generate():
             ws['A1'] = 'Dossier : ' + nom
             ws['A2'] = 'BOA : ' + boa
 
-        # Fill OK/KO/NA values
+        # Fill OK/KO/NA values and add eval formulas where missing
         ans = answers.get(code, {})
         cmt = comments.get(code, {})
+        eval_col = okko_col + 3  # E col for A4/A5/A6, F col for A7/A8
+
         for i, row in enumerate(criteria_rows):
             val = ans.get(str(i), 'OK')
             ws.cell(row=row, column=okko_col).value = val
             comment = cmt.get(str(i), '')
             if comment:
                 ws.cell(row=row, column=comment_col).value = comment
+            # Add evaluation formula if not already present
+            eval_cell = ws.cell(row=row, column=eval_col)
+            if eval_cell.value is None:
+                okko_letter = chr(64 + okko_col)
+                poids_letter = chr(64 + okko_col + 2)
+                if code in ('A7', 'A8'):
+                    eval_cell.value = f'=IF({okko_letter}{row}="OK",{poids_letter}{row},IF({okko_letter}{row}="KO",0,IF({okko_letter}{row}="NA","NA","")))'
+                else:
+                    eval_cell.value = f'=IF({okko_letter}{row}="OK",{poids_letter}{row},IF({okko_letter}{row}="KO",0,""))'
 
     # Save to buffer
     buffer = io.BytesIO()

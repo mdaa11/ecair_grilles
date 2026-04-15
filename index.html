@@ -190,7 +190,7 @@ function buildSectionsHtml(tabCode, sections) {
       html += '<span class="criteria-poids">' + (item.poids > 0 ? item.poids : '') + '</span>';
       html += '<div class="okna-group">';
       ['OK','KO','NA'].forEach(function(v) {
-        html += '<button class="okna-btn ' + v.toLowerCase() + (val === v ? ' selected' : '') + '" onclick="setAnswer(' + JSON.stringify(tabCode) + ',' + idx + ',' + JSON.stringify(v) + ')">' + v + '</button>';
+        html += '<button class="okna-btn ' + v.toLowerCase() + (val === v ? ' selected' : '') + '" onclick="setAnswer(\'' + tabCode + '\',' + idx + ',\'' + v + '\')">' + v + '</button>';
       });
       html += '</div></div>';
       globalIdx++;
