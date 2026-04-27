@@ -10,23 +10,39 @@ CORS(app)
 TEMPLATES_DIR = os.path.dirname(os.path.abspath(__file__))
 
 TEMPLATE_FILES = {
-    'A4': 'GQualité_A4_-_Prénom_Nom.xlsx',
-    'A5': 'GQualité_A5_-_Prénom_Nom.xlsx',
-    'A6': 'GQualité_A6_-_Prénom_Nom.xlsx',
-    'A7': 'GQualité_A7_et_A8_-_Prénom_Nom.xlsx',
-    'A8': 'GQualité_A7_et_A8_-_Prénom_Nom.xlsx',
-    'M7': 'GQualité_M7_et_M8_-_Prénom_Nom.xlsx',
-    'M8': 'GQualité_M7_et_M8_-_Prénom_Nom.xlsx',
+    'A4':     'GQualité_A4_-_Prénom_Nom.xlsx',
+    'A5':     'GQualité_A5_-_Prénom_Nom.xlsx',
+    'A6':     'GQualité_A6_-_Prénom_Nom.xlsx',
+    'A7':     'GQualité_A7_et_A8_-_Prénom_Nom.xlsx',
+    'A8':     'GQualité_A7_et_A8_-_Prénom_Nom.xlsx',
+    'M7':     'GQualité_M7_et_M8_-_Prénom_Nom.xlsx',
+    'M8':     'GQualité_M7_et_M8_-_Prénom_Nom.xlsx',
+    'M3_ACE':  'GQualité_M3_-_Prénom_Nom.xlsx',
+    'M3_ECE':  'GQualité_M3_-_Prénom_Nom.xlsx',
+    'M3_CVAD': 'GQualité_M3_-_Prénom_Nom.xlsx',
 }
 
 SHEET_NAMES = {
     'A4': 'A4', 'A5': 'A5  SPEKTY', 'A6': 'A6',
     'A7': 'A7', 'A8': 'A8',
     'M7': 'M7', 'M8': 'M8',
+    'M3_ACE': 'M3  PAC-ACE', 'M3_ECE': 'M3  PAC-ECE', 'M3_CVAD': 'M3  CVAD',
 }
 
-OKKO_COL  = {'A4': 2, 'A5': 2, 'A6': 2, 'A7': 3, 'A8': 3, 'M7': 3, 'M8': 3}
-COMMENT_COL = {'A4': 6, 'A5': 6, 'A6': 6, 'A7': 7, 'A8': 7, 'M7': 7, 'M8': 7}
+# 1-based column index for OK/KO/NA
+OKKO_COL = {
+    'A4': 2, 'A5': 2, 'A6': 2,
+    'A7': 3, 'A8': 3,
+    'M7': 3, 'M8': 3,
+    'M3_ACE': 2, 'M3_ECE': 2, 'M3_CVAD': 2,
+}
+
+COMMENT_COL = {
+    'A4': 6, 'A5': 6, 'A6': 6,
+    'A7': 7, 'A8': 7,
+    'M7': 7, 'M8': 7,
+    'M3_ACE': 5, 'M3_ECE': 5, 'M3_CVAD': 5,
+}
 
 CRITERIA_ROWS = {
     'A4': [4,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43],
@@ -36,9 +52,21 @@ CRITERIA_ROWS = {
     'A8': [5,6,7,8,9,10,11,12,14,15,16,17,18,19,20,21,22],
     'M7': [4,5,6,7,8,9,10,11,12,13,14,15,16,17,18],
     'M8': [5,6,7,8,9,10,11,12,14,15,16,17,18,19,20,21,22],
+    'M3_ACE':  [6,7,8,9,11,12,13,14,15,17,18,19,20,21,23,24,25,26,27,28,29,31],
+    'M3_ECE':  [5,6,7,8,9,10,11,12,13,14,15],
+    'M3_CVAD': [5,6,7,8,9,10,11,12,13,14,15,16],
 }
 
-COMBINED = {'A7A8': ['A7','A8'], 'M7M8': ['M7','M8']}
+# Combined grilles: UI code -> list of sheet codes
+COMBINED = {
+    'A7A8': ['A7', 'A8'],
+    'M7M8': ['M7', 'M8'],
+    'M3':   ['M3_ACE', 'M3_ECE', 'M3_CVAD'],
+}
+
+# For combined grilles with multiple templates, map each sheet code to its template key
+def get_template_file(code):
+    return TEMPLATE_FILES[code]
 
 with open(os.path.join(TEMPLATES_DIR, 'index.html'), 'r', encoding='utf-8') as f:
     HTML_CONTENT = f.read()
@@ -58,7 +86,11 @@ def generate():
     comments = data.get('comments', {})
 
     codes = COMBINED.get(grille_code, [grille_code])
-    wb = load_workbook(os.path.join(TEMPLATES_DIR, TEMPLATE_FILES[codes[0]]))
+
+    # For M3, all sheets are in one file - load once
+    # For others, same template file for all codes in combined
+    template_file = get_template_file(codes[0])
+    wb = load_workbook(os.path.join(TEMPLATES_DIR, template_file))
 
     for code in codes:
         ws = wb[SHEET_NAMES[code]]
@@ -76,7 +108,7 @@ def generate():
     wb.save(buffer)
     buffer.seek(0)
 
-    display = {'A7A8': 'A7-A8', 'M7M8': 'M7-M8'}.get(grille_code, grille_code)
+    display = {'A7A8': 'A7-A8', 'M7M8': 'M7-M8', 'M3': 'M3'}.get(grille_code, grille_code)
     filename = f'{date_str} - GQualité {display} - {nom}.xlsx'
 
     return send_file(buffer, as_attachment=True, download_name=filename,
