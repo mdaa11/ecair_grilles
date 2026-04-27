@@ -1,7 +1,7 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, send_file
 from flask_cors import CORS
 from openpyxl import load_workbook
-import io, os, copy, json
+import io, os
 from datetime import date
 
 app = Flask(__name__)
@@ -15,25 +15,18 @@ TEMPLATE_FILES = {
     'A6': 'GQualité_A6_-_Prénom_Nom.xlsx',
     'A7': 'GQualité_A7_et_A8_-_Prénom_Nom.xlsx',
     'A8': 'GQualité_A7_et_A8_-_Prénom_Nom.xlsx',
+    'M7': 'GQualité_M7_et_M8_-_Prénom_Nom.xlsx',
+    'M8': 'GQualité_M7_et_M8_-_Prénom_Nom.xlsx',
 }
 
 SHEET_NAMES = {
-    'A4': 'A4',
-    'A5': 'A5  SPEKTY',
-    'A6': 'A6',
-    'A7': 'A7',
-    'A8': 'A8',
+    'A4': 'A4', 'A5': 'A5  SPEKTY', 'A6': 'A6',
+    'A7': 'A7', 'A8': 'A8',
+    'M7': 'M7', 'M8': 'M8',
 }
 
-OKKO_COL = {
-    'A4': 2, 'A5': 2, 'A6': 2,
-    'A7': 3, 'A8': 3,
-}
-
-COMMENT_COL = {
-    'A4': 6, 'A5': 6, 'A6': 6,
-    'A7': 7, 'A8': 7,
-}
+OKKO_COL  = {'A4': 2, 'A5': 2, 'A6': 2, 'A7': 3, 'A8': 3, 'M7': 3, 'M8': 3}
+COMMENT_COL = {'A4': 6, 'A5': 6, 'A6': 6, 'A7': 7, 'A8': 7, 'M7': 7, 'M8': 7}
 
 CRITERIA_ROWS = {
     'A4': [4,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43],
@@ -41,7 +34,11 @@ CRITERIA_ROWS = {
     'A6': [4,5,6,7,8,9,10,11,12,13,14],
     'A7': [4,5,6,7,8,9,10,11,12,13,14,15,16,17,18],
     'A8': [5,6,7,8,9,10,11,12,14,15,16,17,18,19,20,21,22],
+    'M7': [4,5,6,7,8,9,10,11,12,13,14,15,16,17,18],
+    'M8': [5,6,7,8,9,10,11,12,14,15,16,17,18,19,20,21,22],
 }
+
+COMBINED = {'A7A8': ['A7','A8'], 'M7M8': ['M7','M8']}
 
 with open(os.path.join(TEMPLATES_DIR, 'index.html'), 'r', encoding='utf-8') as f:
     HTML_CONTENT = f.read()
@@ -60,63 +57,30 @@ def generate():
     answers = data.get('answers', {})
     comments = data.get('comments', {})
 
-    # For A7A8 combined, generate both sheets in one file
-    codes = ['A7', 'A8'] if grille_code == 'A7A8' else [grille_code]
-
-    # Load template (use A7 template for both A7 and A8)
-    template_file = TEMPLATE_FILES[codes[0]]
-    wb = load_workbook(os.path.join(TEMPLATES_DIR, template_file))
+    codes = COMBINED.get(grille_code, [grille_code])
+    wb = load_workbook(os.path.join(TEMPLATES_DIR, TEMPLATE_FILES[codes[0]]))
 
     for code in codes:
         ws = wb[SHEET_NAMES[code]]
-        okko_col = OKKO_COL[code]
-        comment_col = COMMENT_COL[code]
-        criteria_rows = CRITERIA_ROWS[code]
-
-        # Fill dossier and BOA
-        if code in ('A4', 'A6'):
-            ws['A1'] = 'Dossier : ' + nom
-            ws['A2'] = 'BOA : ' + boa
-        elif code in ('A7', 'A8'):
-            ws['A1'] = 'Dossier : ' + nom
-            ws['A2'] = 'BOA : ' + boa
-
-        # Fill OK/KO/NA values and add eval formulas where missing
+        ws['A1'] = 'Dossier : ' + nom
+        ws['A2'] = 'BOA : ' + boa
         ans = answers.get(code, {})
         cmt = comments.get(code, {})
-        eval_col = okko_col + 3  # E col for A4/A5/A6, F col for A7/A8
-
-        for i, row in enumerate(criteria_rows):
-            val = ans.get(str(i), 'OK')
-            ws.cell(row=row, column=okko_col).value = val
+        for i, row in enumerate(CRITERIA_ROWS[code]):
+            ws.cell(row=row, column=OKKO_COL[code]).value = ans.get(str(i), 'OK')
             comment = cmt.get(str(i), '')
             if comment:
-                ws.cell(row=row, column=comment_col).value = comment
-            # Add evaluation formula if not already present
-            eval_cell = ws.cell(row=row, column=eval_col)
-            if eval_cell.value is None:
-                okko_letter = chr(64 + okko_col)
-                poids_letter = chr(64 + okko_col + 2)
-                if code in ('A7', 'A8'):
-                    eval_cell.value = f'=IF({okko_letter}{row}="OK",{poids_letter}{row},IF({okko_letter}{row}="KO",0,IF({okko_letter}{row}="NA","NA","")))'
-                else:
-                    eval_cell.value = f'=IF({okko_letter}{row}="OK",{poids_letter}{row},IF({okko_letter}{row}="KO",0,""))'
+                ws.cell(row=row, column=COMMENT_COL[code]).value = comment
 
-    # Save to buffer
     buffer = io.BytesIO()
     wb.save(buffer)
     buffer.seek(0)
 
-    display_code = 'A7-A8' if grille_code == 'A7A8' else grille_code
-    filename = f'{date_str} - GQualité {display_code} - {nom}.xlsx'
+    display = {'A7A8': 'A7-A8', 'M7M8': 'M7-M8'}.get(grille_code, grille_code)
+    filename = f'{date_str} - GQualité {display} - {nom}.xlsx'
 
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name=filename,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )
+    return send_file(buffer, as_attachment=True, download_name=filename,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
