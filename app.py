@@ -1,7 +1,7 @@
 from flask import Flask, request, send_file
 from flask_cors import CORS
-from openpyxl import load_workbook
-import io, os, shutil, tempfile
+import io, os, shutil, zipfile, tempfile
+from lxml import etree
 from datetime import date
 
 app = Flask(__name__)
@@ -31,15 +31,13 @@ SHEET_NAMES = {
 
 OKKO_COL = {
     'A4': 2, 'A5': 2, 'A6': 2,
-    'A7': 3, 'A8': 3,
-    'M7': 3, 'M8': 3,
+    'A7': 3, 'A8': 3, 'M7': 3, 'M8': 3,
     'M3_ACE': 2, 'M3_ECE': 2, 'M3_CVAD': 2,
 }
 
 COMMENT_COL = {
     'A4': 6, 'A5': 6, 'A6': 6,
-    'A7': 7, 'A8': 7,
-    'M7': 7, 'M8': 7,
+    'A7': 7, 'A8': 7, 'M7': 7, 'M8': 7,
     'M3_ACE': 5, 'M3_ECE': 5, 'M3_CVAD': 5,
 }
 
@@ -62,6 +60,141 @@ COMBINED = {
     'M3':   ['M3_ACE', 'M3_ECE', 'M3_CVAD'],
 }
 
+NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+
+def col_letter(n):
+    s = ''
+    while n > 0:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+def cell_addr(row, col):
+    return col_letter(col) + str(row)
+
+def get_sheet_path(zip_path, sheet_name):
+    with zipfile.ZipFile(zip_path, 'r') as z:
+        wb_xml = z.read('xl/workbook.xml')
+        wb_rels = z.read('xl/_rels/workbook.xml.rels')
+    root = etree.fromstring(wb_xml)
+    rId = None
+    for s in root.findall(f'.//{{{NS}}}sheet'):
+        if s.get('name') == sheet_name:
+            rId = s.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
+            break
+    if not rId:
+        raise ValueError(f"Sheet '{sheet_name}' not found")
+    rels_root = etree.fromstring(wb_rels)
+    for rel in rels_root:
+        if rel.get('Id') == rId:
+            return 'xl/' + rel.get('Target')
+    raise ValueError(f"Path not found for {rId}")
+
+def inject_into_xlsx(src_path, sheet_values):
+    """
+    sheet_values: dict of {sheet_name: {(row, col): value}}
+    Injects values directly into XML preserving all styles.
+    Returns bytes of the modified xlsx.
+    """
+    tmp = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+    tmp_path = tmp.name
+    tmp.close()
+    shutil.copy2(src_path, tmp_path)
+
+    for sheet_name, values in sheet_values.items():
+        sheet_path = get_sheet_path(tmp_path, sheet_name)
+
+        with zipfile.ZipFile(tmp_path, 'r') as z:
+            sheet_xml = z.read(sheet_path)
+            has_ss = 'xl/sharedStrings.xml' in z.namelist()
+            ss_xml = z.read('xl/sharedStrings.xml') if has_ss else None
+
+        sheet_root = etree.fromstring(sheet_xml)
+
+        # Parse shared strings
+        shared_strings = []
+        if ss_xml is not None:
+            ss_root = etree.fromstring(ss_xml)
+            for si in ss_root.findall(f'{{{NS}}}si'):
+                t = si.find(f'{{{NS}}}t')
+                if t is not None:
+                    shared_strings.append(t.text or '')
+                else:
+                    parts = si.findall(f'.//{{{NS}}}t')
+                    shared_strings.append(''.join(p.text or '' for p in parts))
+        else:
+            ss_root = etree.Element(f'{{{NS}}}sst')
+
+        def get_or_add(s):
+            if s in shared_strings:
+                return shared_strings.index(s)
+            idx = len(shared_strings)
+            shared_strings.append(s)
+            si = etree.SubElement(ss_root, f'{{{NS}}}si')
+            t_el = etree.SubElement(si, f'{{{NS}}}t')
+            t_el.text = s
+            t_el.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            return idx
+
+        # Build cell map
+        sd = sheet_root.find(f'{{{NS}}}sheetData')
+        row_map = {int(r.get('r')): r for r in sd.findall(f'{{{NS}}}row')}
+        cell_map = {}
+        for r_el in sd.findall(f'{{{NS}}}row'):
+            for c_el in r_el.findall(f'{{{NS}}}c'):
+                cell_map[c_el.get('r')] = c_el
+
+        for (row, col), val in values.items():
+            addr = cell_addr(row, col)
+            str_val = str(val)
+            idx = get_or_add(str_val)
+
+            if addr in cell_map:
+                c_el = cell_map[addr]
+            else:
+                if row not in row_map:
+                    r_el = etree.SubElement(sd, f'{{{NS}}}row')
+                    r_el.set('r', str(row))
+                    row_map[row] = r_el
+                c_el = etree.SubElement(row_map[row], f'{{{NS}}}c')
+                c_el.set('r', addr)
+                cell_map[addr] = c_el
+
+            # Remove formula
+            f_el = c_el.find(f'{{{NS}}}f')
+            if f_el is not None:
+                c_el.remove(f_el)
+            # Set as shared string
+            c_el.set('t', 's')
+            v_el = c_el.find(f'{{{NS}}}v')
+            if v_el is None:
+                v_el = etree.SubElement(c_el, f'{{{NS}}}v')
+            v_el.text = str(idx)
+
+        # Update ss count
+        ss_root.set('count', str(len(shared_strings)))
+        ss_root.set('uniqueCount', str(len(shared_strings)))
+
+        sheet_xml_out = etree.tostring(sheet_root, xml_declaration=True, encoding='UTF-8', standalone=True)
+        ss_xml_out = etree.tostring(ss_root, xml_declaration=True, encoding='UTF-8', standalone=True)
+
+        out_path = tmp_path + '.out'
+        with zipfile.ZipFile(tmp_path, 'r') as zin:
+            with zipfile.ZipFile(out_path, 'w', zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    if item.filename == sheet_path:
+                        zout.writestr(item, sheet_xml_out)
+                    elif item.filename == 'xl/sharedStrings.xml':
+                        zout.writestr(item, ss_xml_out)
+                    else:
+                        zout.writestr(item, zin.read(item.filename))
+        os.replace(out_path, tmp_path)
+
+    with open(tmp_path, 'rb') as f:
+        data = f.read()
+    os.unlink(tmp_path)
+    return data
+
 with open(os.path.join(TEMPLATES_DIR, 'index.html'), 'r', encoding='utf-8') as f:
     HTML_CONTENT = f.read()
 
@@ -82,35 +215,33 @@ def generate():
     codes = COMBINED.get(grille_code, [grille_code])
     template_path = os.path.join(TEMPLATES_DIR, TEMPLATE_FILES[codes[0]])
 
-    # Copy template to temp file to preserve all styles
-    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
-        tmp_path = tmp.name
-    shutil.copy2(template_path, tmp_path)
-
-    wb = load_workbook(tmp_path)
-
+    # Build values dict per sheet
+    sheet_values = {}
     for code in codes:
-        ws = wb[SHEET_NAMES[code]]
-        ws['A1'] = 'Dossier : ' + nom
-        ws['A2'] = 'BOA : ' + boa
+        sname = SHEET_NAMES[code]
+        vals = {}
+        vals[(1, 1)] = 'Dossier : ' + nom
+        vals[(2, 1)] = 'BOA : ' + boa
         ans = answers.get(code, {})
         cmt = comments.get(code, {})
         for i, row in enumerate(CRITERIA_ROWS[code]):
-            ws.cell(row=row, column=OKKO_COL[code]).value = ans.get(str(i), 'OK')
+            vals[(row, OKKO_COL[code])] = ans.get(str(i), 'OK')
             comment = cmt.get(str(i), '')
             if comment:
-                ws.cell(row=row, column=COMMENT_COL[code]).value = comment
+                vals[(row, COMMENT_COL[code])] = comment
+        sheet_values[sname] = vals
 
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    os.unlink(tmp_path)
+    xlsx_bytes = inject_into_xlsx(template_path, sheet_values)
 
     display = {'A7A8': 'A7-A8', 'M7M8': 'M7-M8', 'M3': 'M3'}.get(grille_code, grille_code)
     filename = f'{date_str} - GQualité {display} - {nom}.xlsx'
 
-    return send_file(buffer, as_attachment=True, download_name=filename,
-                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return send_file(
+        io.BytesIO(xlsx_bytes),
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
